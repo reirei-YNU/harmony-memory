@@ -1,0 +1,129 @@
+@import "tailwindcss";
+
+/* === 和風カラーパレット === */
+:root {
+  --waka-crimson: #8b3a3a;
+  --waka-moss: #6b8e23;
+  --waka-gold: #c9a84c;
+  --waka-cream: #f5f1e8;
+  --waka-ink: #2c2c2c;
+
+  --background: #f5f1e8;
+  --foreground: #2c2c2c;
+  --card: #fffdf7;
+  --card-foreground: #2c2c2c;
+  --border: #d4c5b9;
+  --input: #ede8df;
+  --ring: #8b3a3a;
+  --muted: #ede8df;
+  --muted-foreground: #7a7065;
+  --primary: #8b3a3a;
+  --primary-foreground: #fffdf7;
+  --secondary: #6b8e23;
+  --secondary-foreground: #fffdf7;
+  --accent: #c9a84c;
+  --accent-foreground: #2c2c2c;
+  --destructive: #b91c1c;
+  --destructive-foreground: #fffdf7;
+  --radius: 0.5rem;
+}
+
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --font-serif: "Noto Serif JP", "游明朝", "YuMincho", serif;
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: "Noto Serif JP", "游明朝", "YuMincho", serif;
+  line-height: 1.7;
+}
+
+/* === Animations === */
+@keyframes waka-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes waka-skeleton {
+  0% {
+    background-color: #e8e3db;
+  }
+  50% {
+    background-color: #f0ece4;
+  }
+  100% {
+    background-color: #e8e3db;
+  }
+}
+
+.waka-fade-in {
+  animation: waka-fade-in 0.5s ease-out both;
+}
+
+.waka-skeleton {
+  animation: waka-skeleton 1.4s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+/* === Score bar === */
+.score-bar-track {
+  background-color: var(--muted);
+  border-radius: 9999px;
+  height: 8px;
+  overflow: hidden;
+}
+
+.score-bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, var(--waka-crimson), var(--waka-gold));
+  transition: width 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* === Grade badge === */
+.grade-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  font-weight: 700;
+  font-size: 1.1rem;
+  border: 2px solid currentColor;
+}
+
+.grade-S { color: #c9a84c; border-color: #c9a84c; background: #fef9ee; }
+.grade-A { color: #8b3a3a; border-color: #8b3a3a; background: #fdf5f5; }
+.grade-B { color: #6b8e23; border-color: #6b8e23; background: #f5f8ee; }
+.grade-C { color: #7a7065; border-color: #7a7065; background: #f5f3ef; }
+.grade-D { color: #9e7b4a; border-color: #9e7b4a; background: #fdf6ee; }
+.grade-E { color: #b91c1c; border-color: #b91c1c; background: #fef2f2; }
