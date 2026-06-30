@@ -5,12 +5,10 @@ import { detectUnknownKanji } from "../../shared/moraCounter.js";
 import { generateCompletion } from "../_core/llm.js";
 import type { WakaAnalysis } from "../../shared/types.js";
 
-function generateSceneryAnalysisPrompt(
-  waka: string,
-  analysis: WakaAnalysis
-): string {
-  const devices = analysis.rhetoricalDevices.join("・") || "なし";
-  const seasons = analysis.detectedSeasonWords.join("・") || "なし";
+function generateSceneryAnalysisPrompt(waka: string, analysis: WakaAnalysis): string {
+  const { breakdown, rhetoricalDevices, detectedSeasonWords } = analysis;
+  const devices = rhetoricalDevices.join("・") || "なし";
+  const seasons = detectedSeasonWords.join("・") || "なし";
 
   return `あなたは平安時代の歌学者です。この和歌を古典的な視点から評価してください。
 
@@ -18,9 +16,12 @@ function generateSceneryAnalysisPrompt(
 ${waka}
 
 【ルール採点の補足情報】
-- 音数正確性: ${analysis.breakdown.moraScore}/5
+- 総合スコア: ${breakdown.total}点（${breakdown.grade}）
+- 音数正確性: ${breakdown.mora.score}/5
 - 検出された修辞技法: ${devices}
 - 検出された季語: ${seasons}
+- 情景スコア（ルール）: ${breakdown.scenery.score}/30
+- 語法スコア（ルール）: ${breakdown.vocabulary.score}/15
 
 【評価観点】
 1. 【浮かぶ景色】この歌から浮かぶ景色を詳細に描写してください（2〜3文）。
@@ -28,13 +29,13 @@ ${waka}
 3. 【季語・季節感】季語の適切性と季節感を 0〜25 の整数で評価してください。
 4. 【修辞技法】修辞技法の使用を 0〜20 の整数で評価してください。
 5. 【古典語法】古典表現の正確性を 0〜10 の整数で評価してください。
-6. 【合計スコア】上記4項目の合計（0〜95）を計算し、totalScore に設定してください。
+6. 【合計スコア】上記4項目の合計を totalScore に設定してください（0〜95）。
 7. 【成績評定】S(90+)・A(80-89)・B(70-79)・C+(60-69)・C(50-59)・D(40-49)・E(0-39)
 8. 【総評】古典的な文体で、この歌の美しさと価値について述べてください（3〜5文）。
 9. 【改善の御指南】より一層の完成度を目指すための具体的なアドバイス（1〜2文）。
-10. 【画像生成プロンプト】この歌の景色を AI 画像生成で表現するための英語プロンプトを作成してください。
+10. 【画像生成プロンプト】この歌の景色を AI 画像生成で表現するための英語プロンプト。
 
-【出力形式】必ず以下の JSON のみを返してください（他のテキスト不要）:
+【出力形式】必ず以下の JSON のみを返してください:
 {
   "sceneryDescription": "景色の描写",
   "sceneryScore": 38,
@@ -49,10 +50,10 @@ ${waka}
 }`;
 }
 
-// Simple in-memory cache to avoid redundant LLM calls
-const reviewCache = new Map<string, object>();
+const reviewCache = new Map<string, Record<string, unknown>>();
 
 export const wakaRouter = router({
+  /** ルールベース採点（AI 不使用） */
   score: publicProcedure
     .input(
       z.object({
@@ -64,14 +65,10 @@ export const wakaRouter = router({
       const { text, tempDict = {} } = input;
       const analysis = scoreWaka(text, tempDict);
       const unknownKanji = detectUnknownKanji(text, tempDict);
-
-      return {
-        success: true,
-        analysis,
-        unknownKanji,
-      };
+      return { success: true, analysis, unknownKanji };
     }),
 
+  /** AI 歌学者の評（オプション・ユーザーが明示的に要求した場合のみ呼び出す） */
   aiReview: publicProcedure
     .input(
       z.object({
@@ -81,8 +78,8 @@ export const wakaRouter = router({
     )
     .mutation(async ({ input }) => {
       const { text, analysis } = input as { text: string; analysis: WakaAnalysis };
-
       const cacheKey = text.trim();
+
       if (reviewCache.has(cacheKey)) {
         return { success: true, ...reviewCache.get(cacheKey) };
       }
@@ -90,17 +87,13 @@ export const wakaRouter = router({
       try {
         const prompt = generateSceneryAnalysisPrompt(text, analysis);
         const { content } = await generateCompletion(prompt);
-
-        // Strip markdown code fences if the model wraps the JSON
-        const cleaned = content.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+        const cleaned = content
+          .replace(/^```(?:json)?\s*/i, "")
+          .replace(/\s*```$/, "")
+          .trim();
         const result = JSON.parse(cleaned) as Record<string, unknown>;
-
         reviewCache.set(cacheKey, result);
-
-        return {
-          success: true,
-          ...result,
-        };
+        return { success: true, ...result };
       } catch (error) {
         console.error("[AI Review] Error:", error);
         return {
@@ -112,7 +105,7 @@ export const wakaRouter = router({
           vocabularyScore: 0,
           totalScore: 0,
           grade: "E",
-          review: "評価の取得に失敗しました。",
+          review: "AI 評価の取得に失敗しました。",
           advice: "",
           imagePrompt: "",
         };

@@ -34,15 +34,13 @@ export default function Home() {
   const [unknownKanji, setUnknownKanji] = useState<UnknownKanjiData | null>(null);
   const [tempDict, setTempDict] = useState<Record<string, string>>({});
 
+  // ルールベース採点（AI 呼び出しなし）
   const { mutate: scoreWaka } = trpc.waka.score.useMutation({
     onSuccess: (data) => {
       setIsScoring(false);
-      setAnalysis(data.analysis);
+      setAnalysis(data.analysis as WakaAnalysis);
       if (data.unknownKanji.length > 0) {
         setUnknownKanji(data.unknownKanji[0]);
-      } else {
-        setAiLoading(true);
-        fetchAiReview({ text: wakaText, analysis: data.analysis });
       }
     },
     onError: () => {
@@ -50,6 +48,7 @@ export default function Home() {
     },
   });
 
+  // AI 評価（ユーザーが明示的にボタンを押したときのみ）
   const { mutate: fetchAiReview } = trpc.waka.aiReview.useMutation({
     onSuccess: (data) => {
       setAiReview(data as AiReviewData);
@@ -85,6 +84,12 @@ export default function Home() {
     setUnknownKanji(null);
   };
 
+  const handleRequestAiReview = () => {
+    if (!analysis) return;
+    setAiLoading(true);
+    fetchAiReview({ text: wakaText, analysis });
+  };
+
   const loadSample = (text: string) => {
     setWakaText(text);
     setAnalysis(null);
@@ -95,12 +100,20 @@ export default function Home() {
   if (analysis) {
     return (
       <main className="min-h-screen px-4 py-8">
+        {unknownKanji && (
+          <UnknownKanjiDialog
+            kanji={unknownKanji.kanji}
+            onConfirm={handleKanjiConfirm}
+            onCancel={() => setUnknownKanji(null)}
+          />
+        )}
         <ScoreResult
           wakaText={wakaText}
           analysis={analysis}
           aiReview={aiReview}
           aiLoading={aiLoading}
           onReset={handleReset}
+          onRequestAiReview={handleRequestAiReview}
         />
       </main>
     );
