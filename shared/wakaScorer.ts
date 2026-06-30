@@ -1,4 +1,21 @@
 import { splitPhrases } from "./moraCounter.js";
+import {
+  hashText,
+  pick,
+  LANDSCAPE_OPENING,
+  LANDSCAPE_SCENE,
+  LANDSCAPE_CLOSING,
+  LANDSCAPE_RHETORICAL,
+  LANDSCAPE_MORA_PERFECT,
+  REVIEW_OPENING,
+  REVIEW_MORA_OK,
+  REVIEW_MORA_NG,
+  REVIEW_RHETORICAL_MANY,
+  REVIEW_RHETORICAL_ONE,
+  REVIEW_RHETORICAL_NONE,
+  REVIEW_SEASON,
+  REVIEW_CLOSING,
+} from "./textPatterns.js";
 import type {
   WakaAnalysis,
   WakaBreakdown,
@@ -344,103 +361,88 @@ export function getGrade(total: number): string {
   return "E";
 }
 
-// ─── 景色の描写（ルールベース） ────────────────────────────────────────────
+// ─── 景色の描写（パターンベース・決定論的） ──────────────────────────────
+
+function detectSceneType(text: string): string {
+  if (/山|峰|嶺|丘|岳/.test(text)) return "山岳";
+  if (/川|海|波|水|湖|沢/.test(text)) return "水景";
+  if (/天|空|雲|霞|霧/.test(text)) return "天空";
+  if (/花|桜|梅|萩|草|木|葉|紅葉/.test(text)) return "草花";
+  if (/月|夜|宵|星/.test(text)) return "夜景";
+  return "一般";
+}
+
+function getSeasonKey(seasonWords: string[]): string {
+  if (seasonWords.length === 0) return "なし";
+  const raw = seasonWords[0].replace(/（.*）/, "");
+  for (const s of ["春", "夏", "秋", "冬"]) {
+    if (raw.includes(s)) return s;
+  }
+  // 代表語から季節推定
+  if (/桜|梅|霞|鶯|藤|若菜/.test(raw)) return "春";
+  if (/蛍|卯|衣ほす/.test(raw)) return "夏";
+  if (/紅葉|もみぢ|萩|鹿|露|雁/.test(raw)) return "秋";
+  if (/雪|霜|氷|千鳥/.test(raw)) return "冬";
+  return "なし";
+}
 
 function generateLandscapeDescription(
   text: string,
   natureWords: string[],
-  colors: string[],
+  _colors: string[],
   seasonWords: string[],
-  phrases: Phrase[]
+  phrases: Phrase[],
+  sceneryScore: number,
+  devices: string[]
 ): string {
-  const season = seasonWords[0]?.replace(/（.*）/, "") ?? "";
-  const mainNature = natureWords.slice(0, 2).join("・");
-  const mainColor = colors[0] ?? "";
+  const h = hashText(text);
+  const seasonKey = getSeasonKey(seasonWords);
+  const sceneKey = detectSceneType(text);
+  const closingKey = sceneryScore >= 20 ? "high" : sceneryScore >= 10 ? "mid" : "low";
 
-  const hasMovement = /散|流|吹|降|照|揺|咲/.test(text);
-  const hasNight = /夜|宵|月/.test(text);
-  const hasDay = /朝|暁|昼|光/.test(text);
-  const hasMountain = /山|峰|嶺/.test(text);
-  const hasWater = /川|海|波|水/.test(text);
+  const opening = pick(LANDSCAPE_OPENING[seasonKey] ?? LANDSCAPE_OPENING["なし"], h);
+  const scene = pick(LANDSCAPE_SCENE[sceneKey] ?? LANDSCAPE_SCENE["一般"], h + 1);
+  const closing = pick(LANDSCAPE_CLOSING[closingKey], h + 2);
 
-  const timePart = hasNight ? "夜の" : hasDay ? "昼の" : "";
-  const placePart = hasMountain && hasWater ? "山と水辺を舞台に" :
-    hasMountain ? "山を舞台に" :
-    hasWater ? "水辺を舞台に" : "";
-
-  let desc = "";
-
-  if (placePart) desc += `${placePart}、`;
-  if (season) desc += `${season}の${timePart}`;
-
-  if (mainColor && mainNature) {
-    desc += `${mainColor}の色彩と${mainNature}が織りなす情景が目に浮かびます。`;
-  } else if (mainNature) {
-    desc += `${mainNature}の情景が目に浮かびます。`;
-  } else {
-    desc += "情景が目に浮かびます。";
+  const parts = [opening, scene];
+  if (devices.length > 0) parts.push(pick(LANDSCAPE_RHETORICAL, h + 3));
+  if (phrases.length === 5 && phrases.every((p) => p.isCorrect)) {
+    parts.push(pick(LANDSCAPE_MORA_PERFECT, h + 4));
   }
+  parts.push(closing);
 
-  if (hasMovement) {
-    desc += "動きのある描写が歌に生き生きとした躍動感をもたらしています。";
-  }
-
-  if (phrases.every((p) => p.isCorrect) && phrases.length === 5) {
-    desc += "五七五七七の調べが整い、清澄な音の流れが情景を引き立てます。";
-  }
-
-  return desc || "この歌の情景をさらに豊かに表現すると、より鮮やかな景色が浮かぶでしょう。";
+  return parts.join("");
 }
 
-// ─── 古典調の総評（ルールベース） ──────────────────────────────────────────
+// ─── 古典調の総評（パターンベース・決定論的） ────────────────────────────
 
 function generateRuleReview(
   total: number,
   devices: string[],
   seasonWords: string[],
-  phrases: Phrase[]
+  phrases: Phrase[],
+  text: string
 ): string {
-  const parts: string[] = [];
+  const h = hashText(text);
+  const grade = getGrade(total);
+  const openingKey = grade as keyof typeof REVIEW_OPENING;
+  const seasonKey = getSeasonKey(seasonWords);
 
-  // 総合評価の書き出し
-  if (total >= 85) {
-    parts.push("誠に優れた歌なり。");
-  } else if (total >= 70) {
-    parts.push("趣深き佳作なり。");
-  } else if (total >= 55) {
-    parts.push("心のこもりし歌なれど、なお磨きをかける余地あり。");
-  } else {
-    parts.push("学びの途上にある歌なり。研鑽を重ねられたし。");
-  }
-
-  // 音数
   const allCorrect = phrases.length === 5 && phrases.every((p) => p.isCorrect);
-  if (allCorrect) {
-    parts.push("五七五七七の型は完璧に整い、型の確かさが読み手に安心をもたらす。");
-  } else {
-    parts.push("音数に乱れあり。短歌の根本たる型を今一度確認されたし。");
-  }
 
-  // 修辞技法
-  if (devices.length >= 2) {
-    parts.push(
-      `${devices[0]}をはじめ${devices.length}つの修辞技法が巧みに配され、言葉の重みを増している。`
-    );
-  } else if (devices.length === 1) {
-    parts.push(`${devices[0]}が巧みに用いられ、言葉に深みを添えている。`);
-  } else {
-    parts.push("修辞技法の活用が少なく、枕詞・掛詞を取り入れると一段と風情が増そう。");
-  }
+  const parts = [
+    pick(REVIEW_OPENING[openingKey] ?? REVIEW_OPENING["C"], h),
+    allCorrect ? pick(REVIEW_MORA_OK, h + 1) : pick(REVIEW_MORA_NG, h + 1),
+    devices.length >= 2
+      ? pick(REVIEW_RHETORICAL_MANY, h + 2)
+      : devices.length === 1
+      ? pick(REVIEW_RHETORICAL_ONE, h + 2)
+      : pick(REVIEW_RHETORICAL_NONE, h + 2),
+    pick(REVIEW_SEASON[seasonKey] ?? REVIEW_SEASON["なし"], h + 3),
+    pick(REVIEW_CLOSING, h + 4),
+  ];
 
-  // 季語
-  if (seasonWords.length > 0) {
-    const season = seasonWords[0].replace(/（.*）/, "");
-    parts.push(`${season}の季語が歌に彩りを与えている。`);
-  } else {
-    parts.push("季語がなく、季節感の表現を加えると奥行きが生まれよう。");
-  }
-
-  return parts.join("");
+  return parts.join("")
 }
 
 // ─── 改善ヒント ────────────────────────────────────────────────────────────
@@ -536,9 +538,9 @@ export function scoreWaka(
 
   const improvements = generateImprovements(breakdown, phrases, devices, seasonWords);
   const landscapeDescription = generateLandscapeDescription(
-    text, natureWords, colors, seasonWords, phrases
+    text, natureWords, colors, seasonWords, phrases, scenery.score, devices
   );
-  const ruleReview = generateRuleReview(total, devices, seasonWords, phrases);
+  const ruleReview = generateRuleReview(total, devices, seasonWords, phrases, text);
 
   return {
     breakdown,
