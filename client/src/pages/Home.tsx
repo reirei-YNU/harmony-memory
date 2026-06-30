@@ -4,7 +4,11 @@ import { ScoreResult } from "@/components/ScoreResult";
 import { UnknownKanjiDialog } from "@/components/UnknownKanjiDialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { scoreWaka } from "@shared/wakaScorer.js";
+import { detectUnknownKanji } from "@shared/moraCounter.js";
 import type { WakaAnalysis, AiReviewData, UnknownKanjiData } from "@shared/types.js";
+
+const STATIC_MODE = import.meta.env.VITE_STATIC_MODE === "true";
 
 const SAMPLE_WAKA = [
   {
@@ -34,20 +38,6 @@ export default function Home() {
   const [unknownKanji, setUnknownKanji] = useState<UnknownKanjiData | null>(null);
   const [tempDict, setTempDict] = useState<Record<string, string>>({});
 
-  // ルールベース採点（AI 呼び出しなし）
-  const { mutate: scoreWaka } = trpc.waka.score.useMutation({
-    onSuccess: (data) => {
-      setIsScoring(false);
-      setAnalysis(data.analysis as WakaAnalysis);
-      if (data.unknownKanji.length > 0) {
-        setUnknownKanji(data.unknownKanji[0]);
-      }
-    },
-    onError: () => {
-      setIsScoring(false);
-    },
-  });
-
   // AI 評価（ユーザーが明示的にボタンを押したときのみ）
   const { mutate: fetchAiReview } = trpc.waka.aiReview.useMutation({
     onSuccess: (data) => {
@@ -59,12 +49,23 @@ export default function Home() {
     },
   });
 
+  const runScore = (text: string, dict: Record<string, string>) => {
+    setIsScoring(true);
+    try {
+      const analysis = scoreWaka(text, dict);
+      const unknownList = detectUnknownKanji(text, dict);
+      setAnalysis(analysis as WakaAnalysis);
+      if (unknownList.length > 0) setUnknownKanji(unknownList[0]);
+    } finally {
+      setIsScoring(false);
+    }
+  };
+
   const handleScore = () => {
     if (!wakaText.trim()) return;
-    setIsScoring(true);
     setAnalysis(null);
     setAiReview(null);
-    scoreWaka({ text: wakaText, tempDict });
+    runScore(wakaText, tempDict);
   };
 
   const handleKanjiConfirm = (reading: string) => {
@@ -72,8 +73,7 @@ export default function Home() {
     const newDict = { ...tempDict, [unknownKanji.kanji]: reading };
     setTempDict(newDict);
     setUnknownKanji(null);
-    setIsScoring(true);
-    scoreWaka({ text: wakaText, tempDict: newDict });
+    runScore(wakaText, newDict);
   };
 
   const handleReset = () => {

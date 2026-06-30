@@ -12,6 +12,7 @@ export default defineConfig({
     },
   },
   root: "client",
+  base: process.env.VITE_BASE_PATH ?? "/",
   build: {
     outDir: "../dist/client",
     emptyOutDir: true,

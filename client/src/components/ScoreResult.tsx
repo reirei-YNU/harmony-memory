@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronUp, Sparkles } from "lucide-react";
 
+const STATIC_MODE = import.meta.env.VITE_STATIC_MODE === "true";
+
 interface ScoreResultProps {
   wakaText: string;
   analysis: WakaAnalysis;
@@ -206,7 +208,7 @@ export function ScoreResult({
       </section>
 
       {/* ── AI 歌学者の評（オプション） ── */}
-      <section className="bg-card border border-border rounded-lg p-5">
+      {!STATIC_MODE && <section className="bg-card border border-border rounded-lg p-5">
         <h2 className="text-xs font-medium tracking-[0.2em] text-muted-foreground mb-3">
           ✦ AI 歌学者の評（オプション）
         </h2>
@@ -271,7 +273,7 @@ export function ScoreResult({
             )}
           </div>
         )}
-      </section>
+      </section>}
 
       {/* ── アクション ── */}
       <div className="flex justify-center pb-8">
