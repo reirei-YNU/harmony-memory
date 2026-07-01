@@ -1,0 +1,67 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isMemberOfGroupDoc(groupDoc) {
+      return isSignedIn() && request.auth.uid in groupDoc.data.memberIds;
+    }
+
+    function isMemberOfGroup(groupId) {
+      return isMemberOfGroupDoc(get(/databases/$(database)/documents/groups/$(groupId)));
+    }
+
+    // A user may only read/write their own profile document.
+    match /users/{userId} {
+      allow read, update, create: if isSignedIn() && request.auth.uid == userId;
+      allow delete: if false;
+    }
+
+    // Groups are readable by any signed-in user so that joining by invite
+    // code (a query, not a direct lookup) can succeed. Group documents hold
+    // no sensitive data beyond membership and an invite code.
+    match /groups/{groupId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() &&
+        request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.memberIds == [request.auth.uid];
+
+      // Existing members may update group settings (e.g. levels).
+      // A non-member may update only to add themselves to memberIds
+      // (joining via invite code) and nothing else.
+      allow update: if isSignedIn() && (
+        isMemberOfGroupDoc(resource) ||
+        (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds']) &&
+          request.resource.data.memberIds.size() == resource.data.memberIds.size() + 1 &&
+          request.resource.data.memberIds.hasAll(resource.data.memberIds) &&
+          request.resource.data.memberIds.hasAny([request.auth.uid])
+        )
+      );
+
+      allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
+    match /songs/{songId} {
+      allow read: if isMemberOfGroup(resource.data.groupId);
+      allow create: if isMemberOfGroup(request.resource.data.groupId) &&
+        request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if isMemberOfGroup(resource.data.groupId);
+    }
+
+    match /recordings/{recordingId} {
+      allow read: if isMemberOfGroup(resource.data.groupId);
+      allow create: if isMemberOfGroup(request.resource.data.groupId) &&
+        request.resource.data.createdBy == request.auth.uid;
+      // Only the person who recorded a take, or the group owner, may modify/remove it.
+      allow update, delete: if isMemberOfGroup(resource.data.groupId) && (
+        request.auth.uid == resource.data.createdBy ||
+        request.auth.uid == get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.ownerId
+      );
+    }
+  }
+}
