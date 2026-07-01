@@ -1,4 +1,4 @@
-import { splitPhrases } from "./moraCounter.js";
+import { splitPhrases, convertToHiragana } from "./moraCounter.js";
 import {
   hashText,
   pick,
@@ -38,8 +38,13 @@ function makeDim(details: SubDetail[], maxScore: number): ScoreDimension {
   return { score, maxScore, details };
 }
 
-function detected(text: string, words: string[]): string[] {
-  return words.filter((w) => text.includes(w));
+// Check both raw text and hiragana-converted text (handles 紅葉→もみぢ etc.)
+function inText(word: string, raw: string, hira: string): boolean {
+  return raw.includes(word) || hira.includes(word);
+}
+
+function detected(text: string, hira: string, words: string[]): string[] {
+  return words.filter((w) => inText(w, text, hira));
 }
 
 // ─── 情景表現力 (30pt) ──────────────────────────────────────────────────────
@@ -57,7 +62,7 @@ const NATURE_GROUPS: Array<{ label: string; words: string[]; pts: number }> = [
   { label: "空間の対比",      words: ["遠", "近", "深", "高", "上", "下"], pts: 2 },
 ];
 
-function scoreScenery(text: string): {
+function scoreScenery(text: string, hira: string): {
   dim: ScoreDimension;
   natureWords: string[];
   colors: string[];
@@ -67,7 +72,7 @@ function scoreScenery(text: string): {
   const details: SubDetail[] = [];
 
   for (const g of NATURE_GROUPS) {
-    const hits = detected(text, g.words);
+    const hits = detected(text, hira, g.words);
     const achieved = hits.length > 0;
     if (achieved) {
       natureWords.push(...hits.slice(0, 2));
@@ -94,13 +99,13 @@ const KIGO: Record<string, string[]> = {
   冬: ["冬", "雪", "霜", "氷", "冬来", "千鳥"],
 };
 
-function scoreSeason(text: string): {
+function scoreSeason(text: string, hira: string): {
   dim: ScoreDimension;
   seasonWords: string[];
 } {
   const foundBySeason: Record<string, string[]> = {};
   for (const [season, words] of Object.entries(KIGO)) {
-    const hits = words.filter((w) => text.includes(w));
+    const hits = words.filter((w) => inText(w, text, hira));
     if (hits.length) foundBySeason[season] = hits;
   }
 
@@ -202,7 +207,7 @@ const HONKADORI: Array<{ label: string; pattern: RegExp; pts: number }> = [
   { label: "本歌取り（あしびきの）", pattern: /あしびきの.{0,4}山鳥/, pts: 5 },
 ];
 
-function scoreRhetorical(text: string): {
+function scoreRhetorical(text: string, hira: string): {
   dim: ScoreDimension;
   devices: string[];
 } {
@@ -213,7 +218,7 @@ function scoreRhetorical(text: string): {
   // 枕詞（最大2つ認定）
   let makuraCount = 0;
   for (const m of MAKURA_KOTOBA) {
-    if (m.pattern.test(text)) {
+    if (m.pattern.test(text) || m.pattern.test(hira)) {
       const achieved = makuraCount < 2;
       const pts = achieved ? m.pts : 0;
       details.push({ label: m.desc, points: pts, achieved });
@@ -229,7 +234,7 @@ function scoreRhetorical(text: string): {
   // 掛詞（最大1つ認定）
   let kakeCount = 0;
   for (const k of KAKEKOTOBA) {
-    if (k.pattern.test(text) && kakeCount < 1) {
+    if ((k.pattern.test(text) || k.pattern.test(hira)) && kakeCount < 1) {
       details.push({ label: k.desc, points: k.pts, achieved: true });
       devices.push(k.desc);
       ptSum += k.pts;
@@ -240,7 +245,7 @@ function scoreRhetorical(text: string): {
 
   // 縁語
   for (const e of ENGO_SETS) {
-    const hits = e.patterns.filter((p) => p.test(text)).length;
+    const hits = e.patterns.filter((p) => p.test(text) || p.test(hira)).length;
     if (hits >= 2) {
       details.push({ label: e.label, points: e.pts, achieved: true });
       devices.push(e.label);
@@ -251,7 +256,7 @@ function scoreRhetorical(text: string): {
 
   // 序詞
   for (const jo of JO_KOTOBA_RE) {
-    if (jo.test(text)) {
+    if (jo.test(text) || jo.test(hira)) {
       details.push({ label: "序詞（長い導入句）", points: 5, achieved: true });
       devices.push("序詞");
       ptSum += 5;
@@ -261,7 +266,7 @@ function scoreRhetorical(text: string): {
 
   // 本歌取り
   for (const h of HONKADORI) {
-    if (h.pattern.test(text)) {
+    if (h.pattern.test(text) || h.pattern.test(hira)) {
       details.push({ label: h.label, points: h.pts, achieved: true });
       devices.push(h.label);
       ptSum += h.pts;
@@ -302,10 +307,10 @@ const CLASSICAL_GRAMMAR: Array<{ label: string; patterns: RegExp[]; pts: number 
   { label: "雅語「いにしへ・むかし」",patterns: [/いにしへ|むかし|をとめ/], pts: 2 },
 ];
 
-function scoreVocabulary(text: string): ScoreDimension {
+function scoreVocabulary(text: string, hira: string): ScoreDimension {
   const details: SubDetail[] = [];
   for (const g of CLASSICAL_GRAMMAR) {
-    const achieved = g.patterns.some((p) => p.test(text));
+    const achieved = g.patterns.some((p) => p.test(text) || p.test(hira));
     details.push({ label: g.label, points: g.pts, achieved });
   }
   return makeDim(details, 15);
@@ -511,11 +516,13 @@ export function scoreWaka(
   tempDict: Record<string, string> = {}
 ): WakaAnalysis {
   const phrases = splitPhrases(text, tempDict);
+  // Scoring checks both raw text and hiragana conversion (e.g. 紅葉 → もみぢ)
+  const hira = convertToHiragana(text, tempDict);
 
-  const { dim: scenery, natureWords, colors } = scoreScenery(text);
-  const { dim: season, seasonWords } = scoreSeason(text);
-  const { dim: rhetorical, devices } = scoreRhetorical(text);
-  const vocabulary = scoreVocabulary(text);
+  const { dim: scenery, natureWords, colors } = scoreScenery(text, hira);
+  const { dim: season, seasonWords } = scoreSeason(text, hira);
+  const { dim: rhetorical, devices } = scoreRhetorical(text, hira);
+  const vocabulary = scoreVocabulary(text, hira);
   const mora = scoreMora(phrases);
   const structure = scoreStructure(phrases);
 

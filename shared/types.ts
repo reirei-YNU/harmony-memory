@@ -63,4 +63,5 @@ export interface AiReviewData {
 export interface UnknownKanjiData {
   kanji: string;
   position: number;
+  suggested: string;
 }

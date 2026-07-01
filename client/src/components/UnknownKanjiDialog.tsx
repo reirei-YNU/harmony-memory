@@ -13,16 +13,18 @@ import { Label } from "@/components/ui/label";
 
 interface UnknownKanjiDialogProps {
   kanji: string;
+  suggested?: string;
   onConfirm: (reading: string) => void;
   onCancel: () => void;
 }
 
 export function UnknownKanjiDialog({
   kanji,
+  suggested = "",
   onConfirm,
   onCancel,
 }: UnknownKanjiDialogProps) {
-  const [reading, setReading] = useState("");
+  const [reading, setReading] = useState(suggested);
 
   const isValidReading = /^[ぁ-ん]+$/.test(reading);
 
@@ -38,7 +40,7 @@ export function UnknownKanjiDialog({
         <DialogHeader>
           <DialogTitle>未登録の文字が見つかりました</DialogTitle>
           <DialogDescription>
-            辞書に登録されていない漢字の読みをひらがなで入力してください。
+            辞書に登録されていない漢字の読みを確認・修正してください。
           </DialogDescription>
         </DialogHeader>
 
@@ -46,6 +48,9 @@ export function UnknownKanjiDialog({
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-center">
             <span className="text-4xl font-bold text-amber-800">{kanji}</span>
             <p className="text-sm text-amber-700 mt-2">この文字の読みは？</p>
+            {suggested && (
+              <p className="text-xs text-amber-600 mt-1">推測: {suggested}</p>
+            )}
           </div>
 
           <div className="space-y-1.5">

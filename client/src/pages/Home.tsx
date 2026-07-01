@@ -103,6 +103,7 @@ export default function Home() {
         {unknownKanji && (
           <UnknownKanjiDialog
             kanji={unknownKanji.kanji}
+            suggested={unknownKanji.suggested}
             onConfirm={handleKanjiConfirm}
             onCancel={() => setUnknownKanji(null)}
           />
