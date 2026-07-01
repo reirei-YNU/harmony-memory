@@ -18,11 +18,13 @@ import {
   setDoc,
   updateDoc,
   where,
+  type Timestamp,
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from './AuthContext'
 import { DEFAULT_LEVELS, type Group } from '../types'
 import { generateInviteCode } from '../lib/inviteCode'
+import { timestampToMillis } from '../lib/firestoreHelpers'
 
 const ACTIVE_GROUP_STORAGE_KEY = 'harmony-memory:activeGroupId'
 
@@ -79,7 +81,12 @@ export function GroupProvider({ children }: { children: ReactNode }) {
       for (const chunk of chunks) {
         const q = query(collection(db, 'groups'), where(documentId(), 'in', chunk))
         const snap = await getDocs(q)
-        snap.forEach((d) => results.push({ id: d.id, ...(d.data() as Omit<Group, 'id'>) }))
+        snap.forEach((d) => {
+          const data = d.data() as Omit<Group, 'id' | 'createdAt'> & {
+            createdAt: Timestamp | number | null
+          }
+          results.push({ id: d.id, ...data, createdAt: timestampToMillis(data.createdAt) })
+        })
       }
       if (!cancelled) {
         setGroups(results)

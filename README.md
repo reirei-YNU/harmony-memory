@@ -56,6 +56,19 @@ npm install
 npm run dev
 ```
 
+### 4-a. Firebase プロジェクトなしで試す（ローカルエミュレータ）
+
+Firebase プロジェクトをまだ作っていなくても、[Firebase Local Emulator Suite](https://firebase.google.com/docs/emulator-suite) を使えばローカルで一通り動作を試せます（要 Java）。
+
+```bash
+npm install -g firebase-tools
+firebase emulators:start --project demo-harmony-memory
+# 別ターミナルで
+VITE_USE_FIREBASE_EMULATORS=true npm run dev
+```
+
+`.env` は不要です。ログイン・グループ作成・録音・共有まですべてローカルで完結します（データはエミュレータ終了時に消えます）。Emulator UI は http://127.0.0.1:4000 で確認できます。
+
 ### 5. GitHub Pages へのデプロイ
 
 `main` ブランチに push すると `.github/workflows/static.yml` が自動でビルド・デプロイします。事前に以下をリポジトリの **Settings > Secrets and variables > Actions** に登録してください（`.env` と同じ値）。
