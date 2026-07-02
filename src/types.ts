@@ -3,7 +3,6 @@ export interface Group {
   name: string
   inviteCode: string
   ownerId: string
-  memberIds: string[]
   levels: string[]
   createdAt: number
 }
@@ -25,7 +24,6 @@ export interface Recording {
   title?: string
   memo?: string
   storagePath: string
-  downloadURL: string
   durationSec: number
   sizeBytes: number
   createdBy: string

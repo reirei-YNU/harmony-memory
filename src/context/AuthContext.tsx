@@ -5,19 +5,26 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import {
-  createUserWithEmailAndPassword,
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut,
-  updateProfile,
-  type User,
-} from 'firebase/auth'
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
-import { auth, db } from '../firebase'
+import type { User as SupabaseUser } from '@supabase/supabase-js'
+import { supabase } from '../supabase'
+
+export interface AppUser {
+  id: string
+  email: string | null
+  displayName: string
+}
+
+function toAppUser(user: SupabaseUser | null | undefined): AppUser | null {
+  if (!user) return null
+  return {
+    id: user.id,
+    email: user.email ?? null,
+    displayName: (user.user_metadata?.display_name as string | undefined) ?? '名無し',
+  }
+}
 
 interface AuthContextValue {
-  user: User | null
+  user: AppUser | null
   loading: boolean
   signUp: (email: string, password: string, displayName: string) => Promise<void>
   signIn: (email: string, password: string) => Promise<void>
@@ -27,33 +34,40 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
+  const [user, setUser] = useState<AppUser | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u)
+    supabase.auth.getSession().then(({ data }) => {
+      setUser(toAppUser(data.session?.user))
       setLoading(false)
     })
-    return unsub
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(toAppUser(session?.user))
+      setLoading(false)
+    })
+    return () => subscription.unsubscribe()
   }, [])
 
   async function signUp(email: string, password: string, displayName: string) {
-    const cred = await createUserWithEmailAndPassword(auth, email, password)
-    await updateProfile(cred.user, { displayName })
-    await setDoc(doc(db, 'users', cred.user.uid), {
-      displayName,
-      groupIds: [],
-      createdAt: serverTimestamp(),
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { display_name: displayName || 'ピアニスト' } },
     })
+    if (error) throw error
   }
 
   async function signIn(email: string, password: string) {
-    await signInWithEmailAndPassword(auth, email, password)
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) throw error
   }
 
   async function logOut() {
-    await signOut(auth)
+    const { error } = await supabase.auth.signOut()
+    if (error) throw error
   }
 
   return (

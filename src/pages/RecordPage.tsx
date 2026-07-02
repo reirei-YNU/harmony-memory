@@ -55,7 +55,7 @@ export function RecordPage() {
     try {
       let targetSongId = songId
       if (songMode === 'new') {
-        const song = await createSong(activeGroup.id, newSongTitle, newSongComposer, user.uid)
+        const song = await createSong(activeGroup.id, newSongTitle, newSongComposer, user.id)
         targetSongId = song.id
       }
       await uploadRecording({
@@ -67,8 +67,8 @@ export function RecordPage() {
         blob: recorder.result.blob,
         fileExtension: extensionFor(recorder.result.mimeType),
         durationSec: recorder.result.durationSec,
-        createdBy: user.uid,
-        createdByName: user.displayName ?? '名無し',
+        createdBy: user.id,
+        createdByName: user.displayName,
         onProgress: setUploadFraction,
       })
       setDone(true)

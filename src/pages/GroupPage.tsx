@@ -1,12 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { doc, updateDoc } from 'firebase/firestore'
-import { db } from '../firebase'
+import { supabase } from '../supabase'
 import { useGroup } from '../context/GroupContext'
 import { DEFAULT_LEVELS } from '../types'
 
 export function GroupPage() {
-  const { groups, activeGroup, setActiveGroupId, createGroup, joinGroup } = useGroup()
+  const { groups, activeGroup, setActiveGroupId, createGroup, joinGroup, refetchGroups } = useGroup()
   const navigate = useNavigate()
 
   const [newGroupName, setNewGroupName] = useState('')
@@ -54,10 +53,16 @@ export function GroupPage() {
       setNewLevel('')
       return
     }
-    await updateDoc(doc(db, 'groups', activeGroup.id), {
-      levels: [...activeGroup.levels, newLevel.trim()],
-    })
+    const { error: updateError } = await supabase
+      .from('groups')
+      .update({ levels: [...activeGroup.levels, newLevel.trim()] })
+      .eq('id', activeGroup.id)
+    if (updateError) {
+      setError(updateError.message)
+      return
+    }
     setNewLevel('')
+    await refetchGroups()
   }
 
   return (

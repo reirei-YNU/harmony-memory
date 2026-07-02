@@ -1,38 +1,44 @@
-import { useEffect, useState } from 'react'
-import { collection, onSnapshot, orderBy, query, where, type Timestamp } from 'firebase/firestore'
-import { db } from '../firebase'
-import { timestampToMillis } from '../lib/firestoreHelpers'
+import { useCallback, useEffect, useState } from 'react'
+import { supabase } from '../supabase'
+import { mapSong, type SongRow } from '../lib/mappers'
 import type { Song } from '../types'
 
 export function useSongs(groupId: string | undefined) {
   const [songs, setSongs] = useState<Song[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
+  const refetch = useCallback(async () => {
     if (!groupId) {
       setSongs([])
       setLoading(false)
       return
     }
     setLoading(true)
-    const q = query(
-      collection(db, 'songs'),
-      where('groupId', '==', groupId),
-      orderBy('title'),
-    )
-    const unsub = onSnapshot(q, (snap) => {
-      setSongs(
-        snap.docs.map((d) => {
-          const data = d.data() as Omit<Song, 'id' | 'createdAt'> & {
-            createdAt: Timestamp | number | null
-          }
-          return { id: d.id, ...data, createdAt: timestampToMillis(data.createdAt) }
-        }),
-      )
-      setLoading(false)
-    })
-    return unsub
+    const { data, error } = await supabase
+      .from('songs')
+      .select('*')
+      .eq('group_id', groupId)
+      .order('title', { ascending: true })
+    if (error) throw error
+    setSongs((data as SongRow[]).map(mapSong))
+    setLoading(false)
   }, [groupId])
+
+  useEffect(() => {
+    refetch()
+    if (!groupId) return
+    const channel = supabase
+      .channel(`songs:${groupId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'songs', filter: `group_id=eq.${groupId}` },
+        () => refetch(),
+      )
+      .subscribe()
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [groupId, refetch])
 
   return { songs, loading }
 }

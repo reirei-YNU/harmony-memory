@@ -1,6 +1,5 @@
-import { addDoc, collection, doc, serverTimestamp, setDoc } from 'firebase/firestore'
-import { getDownloadURL, ref, uploadBytesResumable, type UploadTaskSnapshot } from 'firebase/storage'
-import { db, storage } from '../firebase'
+import { supabase } from '../supabase'
+import { mapSong, type SongRow } from './mappers'
 import type { Song } from '../types'
 
 export async function createSong(
@@ -9,22 +8,18 @@ export async function createSong(
   composer: string | undefined,
   createdBy: string,
 ): Promise<Song> {
-  const songsRef = collection(db, 'songs')
-  const docRef = await addDoc(songsRef, {
-    groupId,
-    title: title.trim(),
-    composer: composer?.trim() || null,
-    createdBy,
-    createdAt: serverTimestamp(),
-  })
-  return {
-    id: docRef.id,
-    groupId,
-    title: title.trim(),
-    composer: composer?.trim() || undefined,
-    createdBy,
-    createdAt: Date.now(),
-  }
+  const { data, error } = await supabase
+    .from('songs')
+    .insert({
+      group_id: groupId,
+      title: title.trim(),
+      composer: composer?.trim() || null,
+      created_by: createdBy,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return mapSong(data as SongRow)
 }
 
 export interface UploadRecordingInput {
@@ -43,38 +38,40 @@ export interface UploadRecordingInput {
 
 export async function uploadRecording(input: UploadRecordingInput): Promise<void> {
   const recordingId = crypto.randomUUID()
-  const storagePath = `groups/${input.groupId}/songs/${input.songId}/${recordingId}.${input.fileExtension}`
-  const storageRef = ref(storage, storagePath)
+  const storagePath = `${input.groupId}/${input.songId}/${recordingId}.${input.fileExtension}`
 
-  const task = uploadBytesResumable(storageRef, input.blob, {
-    contentType: input.blob.type,
-  })
+  // supabase-js storage upload doesn't expose progress callbacks; report
+  // start/finish so callers can still show a busy state.
+  input.onProgress?.(0)
+  const { error: uploadError } = await supabase.storage
+    .from('recordings')
+    .upload(storagePath, input.blob, { contentType: input.blob.type })
+  if (uploadError) throw uploadError
+  input.onProgress?.(1)
 
-  await new Promise<void>((resolve, reject) => {
-    task.on(
-      'state_changed',
-      (snapshot: UploadTaskSnapshot) => {
-        input.onProgress?.(snapshot.bytesTransferred / snapshot.totalBytes)
-      },
-      reject,
-      () => resolve(),
-    )
-  })
-
-  const downloadURL = await getDownloadURL(storageRef)
-
-  await setDoc(doc(db, 'recordings', recordingId), {
-    groupId: input.groupId,
-    songId: input.songId,
+  const { error: insertError } = await supabase.from('recordings').insert({
+    id: recordingId,
+    group_id: input.groupId,
+    song_id: input.songId,
     level: input.level,
     title: input.title?.trim() || null,
     memo: input.memo?.trim() || null,
-    storagePath,
-    downloadURL,
-    durationSec: input.durationSec,
-    sizeBytes: input.blob.size,
-    createdBy: input.createdBy,
-    createdByName: input.createdByName,
-    createdAt: serverTimestamp(),
+    storage_path: storagePath,
+    duration_sec: input.durationSec,
+    size_bytes: input.blob.size,
+    created_by: input.createdBy,
+    created_by_name: input.createdByName,
   })
+  if (insertError) {
+    await supabase.storage.from('recordings').remove([storagePath])
+    throw insertError
+  }
+}
+
+export async function getRecordingPlaybackUrl(storagePath: string): Promise<string> {
+  const { data, error } = await supabase.storage
+    .from('recordings')
+    .createSignedUrl(storagePath, 60 * 60)
+  if (error) throw error
+  return data.signedUrl
 }

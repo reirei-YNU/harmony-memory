@@ -35,7 +35,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Audio recordings are stored in Firebase Storage; do not cache large
+        // Audio recordings are stored in Supabase Storage; do not cache large
         // media blobs indefinitely in the service worker cache.
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
       },

@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Recording } from '../types'
 import { LevelBadge } from './LevelBadge'
 import { AudioPlayer } from './AudioPlayer'
 import { formatBytes, formatDuration } from '../lib/audio'
+import { getRecordingPlaybackUrl } from '../lib/recordings'
 
 export function RecordingListItem({
   recording,
@@ -12,6 +13,8 @@ export function RecordingListItem({
   songTitle?: string
 }) {
   const [open, setOpen] = useState(false)
+  const [playbackUrl, setPlaybackUrl] = useState<string | null>(null)
+  const [urlError, setUrlError] = useState<string | null>(null)
   const createdDate = recording.createdAt
     ? new Date(recording.createdAt).toLocaleDateString('ja-JP', {
         year: 'numeric',
@@ -19,6 +22,23 @@ export function RecordingListItem({
         day: 'numeric',
       })
     : ''
+
+  useEffect(() => {
+    if (!open || playbackUrl) return
+    let cancelled = false
+    getRecordingPlaybackUrl(recording.storagePath)
+      .then((url) => {
+        if (!cancelled) setPlaybackUrl(url)
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setUrlError(err instanceof Error ? err.message : '再生用URLの取得に失敗しました')
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [open, playbackUrl, recording.storagePath])
 
   return (
     <li className="recording-item">
@@ -45,7 +65,8 @@ export function RecordingListItem({
             <p className="recording-item-note-title">{recording.title}</p>
           )}
           {recording.memo && <p className="recording-item-memo">{recording.memo}</p>}
-          <AudioPlayer src={recording.downloadURL} />
+          {urlError && <p className="error-text">{urlError}</p>}
+          {playbackUrl ? <AudioPlayer src={playbackUrl} /> : !urlError && <p className="muted">読み込み中...</p>}
         </div>
       )}
     </li>
