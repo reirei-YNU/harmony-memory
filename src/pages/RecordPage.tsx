@@ -6,6 +6,7 @@ import { useSongs } from '../hooks/useSongs'
 import { useAudioRecorder } from '../hooks/useAudioRecorder'
 import { createSong, uploadRecording } from '../lib/recordings'
 import { formatBytes, formatDuration } from '../lib/audio'
+import { getErrorMessage } from '../lib/errors'
 
 const EXTENSION_BY_MIME: Record<string, string> = {
   'audio/webm': 'webm',
@@ -74,7 +75,8 @@ export function RecordPage() {
       setDone(true)
       setTimeout(() => navigate('/'), 900)
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : 'アップロードに失敗しました')
+      setSubmitError(getErrorMessage(err, 'アップロードに失敗しました'))
+      console.error('recording upload failed', err)
       setUploadFraction(null)
     }
   }

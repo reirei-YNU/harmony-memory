@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { getErrorMessage } from '../lib/errors'
 
 export function LoginPage() {
   const { signIn, signUp } = useAuth()
@@ -21,7 +22,8 @@ export function LoginPage() {
         await signIn(email, password)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '認証に失敗しました')
+      setError(getErrorMessage(err, '認証に失敗しました'))
+      console.error('auth failed', err)
     } finally {
       setSubmitting(false)
     }

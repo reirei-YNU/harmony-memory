@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabase'
 import { useGroup } from '../context/GroupContext'
 import { DEFAULT_LEVELS } from '../types'
+import { getErrorMessage } from '../lib/errors'
 
 export function GroupPage() {
   const { groups, activeGroup, setActiveGroupId, createGroup, joinGroup, refetchGroups } = useGroup()
@@ -24,7 +25,8 @@ export function GroupPage() {
       setNewGroupName('')
       navigate('/')
     } catch (err) {
-      setError(err instanceof Error ? err.message : '作成に失敗しました')
+      setError(getErrorMessage(err, '作成に失敗しました'))
+      console.error('createGroup failed', err)
     } finally {
       setBusy(false)
     }
@@ -40,7 +42,8 @@ export function GroupPage() {
       setInviteCode('')
       navigate('/')
     } catch (err) {
-      setError(err instanceof Error ? err.message : '参加に失敗しました')
+      setError(getErrorMessage(err, '参加に失敗しました'))
+      console.error('joinGroup failed', err)
     } finally {
       setBusy(false)
     }
