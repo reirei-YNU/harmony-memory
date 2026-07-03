@@ -42,14 +42,20 @@ export function GroupProvider({ children }: { children: ReactNode }) {
       return
     }
     setLoading(true)
-    const { data, error } = await supabase
-      .from('group_members')
-      .select('groups(*)')
-      .eq('user_id', user.id)
-    if (error) throw error
-    const rows = (data ?? []) as unknown as { groups: GroupRow | null }[]
-    setGroups(rows.filter((r) => r.groups).map((r) => mapGroup(r.groups as GroupRow)))
-    setLoading(false)
+    try {
+      const { data, error } = await supabase
+        .from('group_members')
+        .select('groups(*)')
+        .eq('user_id', user.id)
+      if (error) throw error
+      const rows = (data ?? []) as unknown as { groups: GroupRow | null }[]
+      setGroups(rows.filter((r) => r.groups).map((r) => mapGroup(r.groups as GroupRow)))
+    } catch (err) {
+      console.error('Failed to load groups', err)
+      setGroups([])
+    } finally {
+      setLoading(false)
+    }
   }, [user])
 
   useEffect(() => {

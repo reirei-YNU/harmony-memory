@@ -38,10 +38,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setUser(toAppUser(data.session?.user))
-      setLoading(false)
-    })
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        setUser(toAppUser(data.session?.user))
+      })
+      .catch((err) => {
+        console.error('Failed to load auth session', err)
+        setUser(null)
+      })
+      .finally(() => {
+        setLoading(false)
+      })
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
