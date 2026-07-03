@@ -120,12 +120,15 @@ alter table public.group_members enable row level security;
 alter table public.songs enable row level security;
 alter table public.recordings enable row level security;
 
--- groups: only members can read/update; only the owner can delete. Joining a
--- new group happens exclusively through join_group_by_invite_code() above,
--- so non-members never need (and never get) direct SELECT access.
+-- groups: members can read, plus the owner (even before their own
+-- group_members row exists — e.g. the instant after INSERT ... RETURNING
+-- when creating a group, PostgREST re-checks this SELECT policy against the
+-- returned row and would otherwise come back empty). Joining a new group
+-- happens exclusively through join_group_by_invite_code() above, so
+-- non-members never need (and never get) direct SELECT access otherwise.
 create policy "groups_select_members" on public.groups
   for select to authenticated
-  using (public.is_group_member(id));
+  using (public.is_group_member(id) or owner_id = auth.uid());
 
 create policy "groups_insert_owner" on public.groups
   for insert to authenticated

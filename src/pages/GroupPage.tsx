@@ -69,9 +69,11 @@ export function GroupPage() {
     <div className="page">
       <header className="page-header">
         <h1>グループ設定</h1>
-        <button type="button" onClick={() => navigate('/')}>
-          戻る
-        </button>
+        {activeGroup && (
+          <button type="button" onClick={() => navigate('/')}>
+            戻る
+          </button>
+        )}
       </header>
 
       {groups.length > 0 && (
