@@ -6,6 +6,7 @@ import { LoginPage } from './pages/LoginPage'
 import { GroupPage } from './pages/GroupPage'
 import { HomePage } from './pages/HomePage'
 import { RecordPage } from './pages/RecordPage'
+import { TryRecordingPage } from './pages/TryRecordingPage'
 
 function SupabaseSetupNotice() {
   return (
@@ -22,6 +23,17 @@ function SupabaseSetupNotice() {
 }
 
 export function App() {
+  return (
+    <Routes>
+      {/* Public: no auth/group required, nothing saved. For trying the
+          recording UX while Supabase setup is still being sorted out. */}
+      <Route path="/try" element={<TryRecordingPage />} />
+      <Route path="/*" element={<GatedApp />} />
+    </Routes>
+  )
+}
+
+function GatedApp() {
   const { user, loading: authLoading } = useAuth()
   const { activeGroup, loading: groupLoading } = useGroup()
 

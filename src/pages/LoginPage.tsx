@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { getErrorMessage } from '../lib/errors'
 
@@ -82,6 +83,10 @@ export function LoginPage() {
             {mode === 'signUp' ? '登録する' : 'ログイン'}
           </button>
         </form>
+
+        <p className="muted" style={{ marginTop: 16, textAlign: 'center' }}>
+          <Link to="/try">ログインせず、録音だけ試す →</Link>
+        </p>
       </div>
     </div>
   )
