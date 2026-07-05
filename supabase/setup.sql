@@ -1,6 +1,12 @@
 -- Harmony Memory: Supabase schema, RLS policies, and storage bucket setup.
--- Paste this whole file into the Supabase Dashboard > SQL Editor and run it once
--- on a fresh project.
+-- Paste this whole file into the Supabase Dashboard > SQL Editor and run it.
+-- Safe to re-run any number of times (tables/functions use IF NOT EXISTS /
+-- OR REPLACE, and every policy is dropped before being recreated).
+--
+-- IMPORTANT: if this project uses Database Branching, make sure the branch
+-- selector in the top bar matches the branch your app's VITE_SUPABASE_URL
+-- actually points to before running this — otherwise it'll succeed here but
+-- the app will still see an empty database.
 
 -- ---------------------------------------------------------------------------
 -- Tables
@@ -126,67 +132,82 @@ alter table public.recordings enable row level security;
 -- returned row and would otherwise come back empty). Joining a new group
 -- happens exclusively through join_group_by_invite_code() above, so
 -- non-members never need (and never get) direct SELECT access otherwise.
+drop policy if exists "groups_select_members" on public.groups;
 create policy "groups_select_members" on public.groups
   for select to authenticated
   using (public.is_group_member(id) or owner_id = auth.uid());
 
+drop policy if exists "groups_insert_owner" on public.groups;
 create policy "groups_insert_owner" on public.groups
   for insert to authenticated
   with check (owner_id = auth.uid());
 
+drop policy if exists "groups_update_members" on public.groups;
 create policy "groups_update_members" on public.groups
   for update to authenticated
   using (public.is_group_member(id));
 
+drop policy if exists "groups_delete_owner" on public.groups;
 create policy "groups_delete_owner" on public.groups
   for delete to authenticated
   using (owner_id = auth.uid());
 
 -- group_members: a user can always see/insert/delete their own membership row;
 -- any existing member can see the roster of their own groups.
+drop policy if exists "group_members_select" on public.group_members;
 create policy "group_members_select" on public.group_members
   for select to authenticated
   using (user_id = auth.uid() or public.is_group_member(group_id));
 
+drop policy if exists "group_members_insert_self" on public.group_members;
 create policy "group_members_insert_self" on public.group_members
   for insert to authenticated
   with check (user_id = auth.uid());
 
+drop policy if exists "group_members_delete_self" on public.group_members;
 create policy "group_members_delete_self" on public.group_members
   for delete to authenticated
   using (user_id = auth.uid());
 
 -- songs: any group member can read/create/update/delete songs in their group.
+drop policy if exists "songs_select_members" on public.songs;
 create policy "songs_select_members" on public.songs
   for select to authenticated
   using (public.is_group_member(group_id));
 
+drop policy if exists "songs_insert_members" on public.songs;
 create policy "songs_insert_members" on public.songs
   for insert to authenticated
   with check (public.is_group_member(group_id) and created_by = auth.uid());
 
+drop policy if exists "songs_update_members" on public.songs;
 create policy "songs_update_members" on public.songs
   for update to authenticated
   using (public.is_group_member(group_id));
 
+drop policy if exists "songs_delete_members" on public.songs;
 create policy "songs_delete_members" on public.songs
   for delete to authenticated
   using (public.is_group_member(group_id));
 
 -- recordings: any group member can read; only the recorder or the group
 -- owner can modify/delete a take.
+drop policy if exists "recordings_select_members" on public.recordings;
 create policy "recordings_select_members" on public.recordings
   for select to authenticated
   using (public.is_group_member(group_id));
 
+drop policy if exists "recordings_insert_members" on public.recordings;
 create policy "recordings_insert_members" on public.recordings
   for insert to authenticated
   with check (public.is_group_member(group_id) and created_by = auth.uid());
 
+drop policy if exists "recordings_update_own" on public.recordings;
 create policy "recordings_update_own" on public.recordings
   for update to authenticated
   using (created_by = auth.uid() or public.is_group_owner(group_id));
 
+drop policy if exists "recordings_delete_own" on public.recordings;
 create policy "recordings_delete_own" on public.recordings
   for delete to authenticated
   using (created_by = auth.uid() or public.is_group_owner(group_id));
@@ -202,6 +223,7 @@ on conflict (id) do update
   set file_size_limit = excluded.file_size_limit,
       allowed_mime_types = excluded.allowed_mime_types;
 
+drop policy if exists "recordings_storage_select" on storage.objects;
 create policy "recordings_storage_select" on storage.objects
   for select to authenticated
   using (
@@ -209,6 +231,7 @@ create policy "recordings_storage_select" on storage.objects
     and public.is_group_member((storage.foldername(name))[1]::uuid)
   );
 
+drop policy if exists "recordings_storage_insert" on storage.objects;
 create policy "recordings_storage_insert" on storage.objects
   for insert to authenticated
   with check (
@@ -216,6 +239,7 @@ create policy "recordings_storage_insert" on storage.objects
     and public.is_group_member((storage.foldername(name))[1]::uuid)
   );
 
+drop policy if exists "recordings_storage_delete" on storage.objects;
 create policy "recordings_storage_delete" on storage.objects
   for delete to authenticated
   using (
