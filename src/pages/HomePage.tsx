@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
-import { useGroup } from '../context/GroupContext'
 import { useSongs } from '../hooks/useSongs'
 import { useRecordings } from '../hooks/useRecordings'
-import { useGroupStorageUsage } from '../hooks/useGroupStorageUsage'
+import { useLevels } from '../hooks/useLevels'
+import { useStorageUsage } from '../hooks/useStorageUsage'
 import { StorageMeter } from '../components/StorageMeter'
+import { StatsWidget } from '../components/StatsWidget'
+import { CalendarWidget } from '../components/CalendarWidget'
 import { RecordingListItem } from '../components/RecordingListItem'
-import type { Recording } from '../types'
+import { deleteRecording, saveSong, type Recording } from '../lib/db'
 
 type ViewMode = 'song' | 'level'
 
@@ -18,19 +19,19 @@ interface Section {
 }
 
 export function HomePage() {
-  const { user, logOut } = useAuth()
-  const { activeGroup } = useGroup()
-  const { songs } = useSongs(activeGroup?.id)
-  const { recordings } = useRecordings(activeGroup?.id)
-  const storageUsage = useGroupStorageUsage(recordings)
+  const { songs, refresh: refreshSongs } = useSongs()
+  const { recordings, refresh: refreshRecordings } = useRecordings()
+  const { levels } = useLevels()
+  const storageUsage = useStorageUsage([recordings.length])
 
   const [viewMode, setViewMode] = useState<ViewMode>('song')
   const [search, setSearch] = useState('')
   const [levelFilter, setLevelFilter] = useState<Set<string>>(new Set())
   const [dateSort, setDateSort] = useState<'newest' | 'oldest'>('newest')
+  const [editingGoalSongId, setEditingGoalSongId] = useState<string | null>(null)
+  const [goalDraft, setGoalDraft] = useState('')
 
   const songMap = useMemo(() => new Map(songs.map((s) => [s.id, s])), [songs])
-  const levels = useMemo(() => activeGroup?.levels ?? [], [activeGroup])
 
   function toggleLevelFilter(level: string) {
     setLevelFilter((prev) => {
@@ -73,7 +74,6 @@ export function HomePage() {
         .sort((a, b) => a.heading.localeCompare(b.heading, 'ja'))
     }
 
-    // group by level
     const byLevel = new Map<string, Recording[]>()
     for (const r of sorted) {
       const list = byLevel.get(r.level) ?? []
@@ -85,23 +85,33 @@ export function HomePage() {
       .sort((a, b) => levels.indexOf(a.key) - levels.indexOf(b.key))
   }, [filtered, viewMode, dateSort, songMap, levels])
 
-  if (!activeGroup) return null
+  async function handleDeleteRecording(id: string) {
+    await deleteRecording(id)
+    await refreshRecordings()
+  }
+
+  function startEditingGoal(songId: string, currentGoal?: string) {
+    setEditingGoalSongId(songId)
+    setGoalDraft(currentGoal ?? '')
+  }
+
+  async function saveGoal(songId: string) {
+    const song = songMap.get(songId)
+    if (!song) return
+    await saveSong({ ...song, goal: goalDraft.trim() || undefined })
+    setEditingGoalSongId(null)
+    await refreshSongs()
+  }
 
   return (
     <div className="page">
       <header className="page-header">
-        <div>
-          <h1>{activeGroup.name}</h1>
-          <p className="muted">招待コード: {activeGroup.inviteCode}</p>
-        </div>
-        <div className="page-header-actions">
-          <span className="muted">{user?.displayName}</span>
-          <button type="button" onClick={() => logOut()}>
-            ログアウト
-          </button>
-        </div>
+        <h1>Harmony Memory</h1>
+        <p className="muted">練習の記録</p>
       </header>
 
+      <StatsWidget recordings={recordings} />
+      <CalendarWidget recordings={recordings} />
       <StorageMeter {...storageUsage} />
 
       <div className="toolbar">
@@ -150,29 +160,56 @@ export function HomePage() {
         <Link to="/record" className="btn-primary">
           + 録音する
         </Link>
-        <Link to="/group" className="btn-secondary">
-          グループ設定
-        </Link>
       </div>
 
       {sections.length === 0 && (
         <p className="empty-state">まだ録音がありません。「+ 録音する」から始めましょう。</p>
       )}
 
-      {sections.map((section) => (
-        <section key={section.key} className="song-section">
-          <h2 className="song-section-heading">{section.heading}</h2>
-          <ul className="recording-list">
-            {section.recordings.map((r) => (
-              <RecordingListItem
-                key={r.id}
-                recording={r}
-                songTitle={viewMode === 'level' ? songMap.get(r.songId)?.title : undefined}
-              />
-            ))}
-          </ul>
-        </section>
-      ))}
+      {sections.map((section) => {
+        const song = viewMode === 'song' ? songMap.get(section.key) : undefined
+        return (
+          <section key={section.key} className="song-section">
+            <h2 className="song-section-heading">{section.heading}</h2>
+            {viewMode === 'song' && song && (
+              <div className="song-goal">
+                {editingGoalSongId === song.id ? (
+                  <div className="field-row">
+                    <input
+                      type="text"
+                      placeholder="目標・メモ（例: 次はテンポを安定させる）"
+                      value={goalDraft}
+                      onChange={(e) => setGoalDraft(e.target.value)}
+                      autoFocus
+                    />
+                    <button type="button" onClick={() => saveGoal(song.id)}>
+                      保存
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="song-goal-display"
+                    onClick={() => startEditingGoal(song.id, song.goal)}
+                  >
+                    {song.goal || '目標・メモを追加...'}
+                  </button>
+                )}
+              </div>
+            )}
+            <ul className="recording-list">
+              {section.recordings.map((r) => (
+                <RecordingListItem
+                  key={r.id}
+                  recording={r}
+                  songTitle={viewMode === 'level' ? songMap.get(r.songId)?.title : undefined}
+                  onDelete={handleDeleteRecording}
+                />
+              ))}
+            </ul>
+          </section>
+        )
+      })}
     </div>
   )
 }

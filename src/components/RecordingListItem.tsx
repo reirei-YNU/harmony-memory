@@ -1,20 +1,25 @@
-import { useEffect, useState } from 'react'
-import type { Recording } from '../types'
+import { useEffect, useMemo, useState } from 'react'
+import type { Recording } from '../lib/db'
 import { LevelBadge } from './LevelBadge'
 import { AudioPlayer } from './AudioPlayer'
 import { formatBytes, formatDuration } from '../lib/audio'
-import { getRecordingPlaybackUrl } from '../lib/recordings'
 
 export function RecordingListItem({
   recording,
   songTitle,
+  onDelete,
 }: {
   recording: Recording
   songTitle?: string
+  onDelete?: (id: string) => void
 }) {
   const [open, setOpen] = useState(false)
-  const [playbackUrl, setPlaybackUrl] = useState<string | null>(null)
-  const [urlError, setUrlError] = useState<string | null>(null)
+  const playbackUrl = useMemo(() => URL.createObjectURL(recording.blob), [recording.blob])
+
+  useEffect(() => {
+    return () => URL.revokeObjectURL(playbackUrl)
+  }, [playbackUrl])
+
   const createdDate = recording.createdAt
     ? new Date(recording.createdAt).toLocaleDateString('ja-JP', {
         year: 'numeric',
@@ -22,23 +27,6 @@ export function RecordingListItem({
         day: 'numeric',
       })
     : ''
-
-  useEffect(() => {
-    if (!open || playbackUrl) return
-    let cancelled = false
-    getRecordingPlaybackUrl(recording.storagePath)
-      .then((url) => {
-        if (!cancelled) setPlaybackUrl(url)
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setUrlError(err instanceof Error ? err.message : '再生用URLの取得に失敗しました')
-        }
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [open, playbackUrl, recording.storagePath])
 
   return (
     <li className="recording-item">
@@ -53,7 +41,7 @@ export function RecordingListItem({
             {songTitle ? `${songTitle}` : recording.title || '無題の録音'}
           </span>
           <span className="recording-item-meta">
-            {recording.createdByName} ・ {createdDate} ・ {formatDuration(recording.durationSec)} ・{' '}
+            {createdDate} ・ {formatDuration(recording.durationSec)} ・{' '}
             {formatBytes(recording.sizeBytes)}
           </span>
         </div>
@@ -65,8 +53,12 @@ export function RecordingListItem({
             <p className="recording-item-note-title">{recording.title}</p>
           )}
           {recording.memo && <p className="recording-item-memo">{recording.memo}</p>}
-          {urlError && <p className="error-text">{urlError}</p>}
-          {playbackUrl ? <AudioPlayer src={playbackUrl} /> : !urlError && <p className="muted">読み込み中...</p>}
+          <AudioPlayer src={playbackUrl} />
+          {onDelete && (
+            <button type="button" onClick={() => onDelete(recording.id)}>
+              削除
+            </button>
+          )}
         </div>
       )}
     </li>

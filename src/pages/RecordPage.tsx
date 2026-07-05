@@ -1,28 +1,15 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
-import { useGroup } from '../context/GroupContext'
 import { useSongs } from '../hooks/useSongs'
+import { useLevels } from '../hooks/useLevels'
 import { useAudioRecorder } from '../hooks/useAudioRecorder'
-import { createSong, uploadRecording } from '../lib/recordings'
+import { saveRecording, saveSong, type Song } from '../lib/db'
 import { formatBytes, formatDuration } from '../lib/audio'
 import { getErrorMessage } from '../lib/errors'
 
-const EXTENSION_BY_MIME: Record<string, string> = {
-  'audio/webm': 'webm',
-  'audio/ogg': 'ogg',
-  'audio/mp4': 'm4a',
-}
-
-function extensionFor(mimeType: string): string {
-  const base = mimeType.split(';')[0]
-  return EXTENSION_BY_MIME[base] ?? 'webm'
-}
-
 export function RecordPage() {
-  const { user } = useAuth()
-  const { activeGroup } = useGroup()
-  const { songs } = useSongs(activeGroup?.id)
+  const { songs, refresh: refreshSongs } = useSongs()
+  const { levels } = useLevels()
   const recorder = useAudioRecorder()
   const navigate = useNavigate()
 
@@ -32,10 +19,10 @@ export function RecordPage() {
   const [songId, setSongId] = useState('')
   const [newSongTitle, setNewSongTitle] = useState('')
   const [newSongComposer, setNewSongComposer] = useState('')
-  const [level, setLevel] = useState(activeGroup?.levels[0] ?? '')
+  const [level, setLevel] = useState('')
   const [title, setTitle] = useState('')
   const [memo, setMemo] = useState('')
-  const [uploadFraction, setUploadFraction] = useState<number | null>(null)
+  const [saving, setSaving] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
 
@@ -44,44 +31,51 @@ export function RecordPage() {
     [recorder.result],
   )
 
+  const effectiveLevel = level || levels[0] || ''
+
   const canSubmit =
     Boolean(recorder.result) &&
-    Boolean(level) &&
+    Boolean(effectiveLevel) &&
     (songMode === 'existing' ? Boolean(songId) : newSongTitle.trim().length > 0)
 
   async function handleSubmit() {
-    if (!activeGroup || !user || !recorder.result) return
+    if (!recorder.result) return
     setSubmitError(null)
-    setUploadFraction(0)
+    setSaving(true)
     try {
       let targetSongId = songId
       if (songMode === 'new') {
-        const song = await createSong(activeGroup.id, newSongTitle, newSongComposer, user.id)
+        const song: Song = {
+          id: crypto.randomUUID(),
+          title: newSongTitle.trim(),
+          composer: newSongComposer.trim() || undefined,
+          createdAt: Date.now(),
+        }
+        await saveSong(song)
         targetSongId = song.id
+        await refreshSongs()
       }
-      await uploadRecording({
-        groupId: activeGroup.id,
+      await saveRecording({
+        id: crypto.randomUUID(),
         songId: targetSongId,
-        level,
-        title,
-        memo,
+        level: effectiveLevel,
+        title: title.trim() || undefined,
+        memo: memo.trim() || undefined,
         blob: recorder.result.blob,
-        fileExtension: extensionFor(recorder.result.mimeType),
+        mimeType: recorder.result.mimeType,
         durationSec: recorder.result.durationSec,
-        createdBy: user.id,
-        createdByName: user.displayName,
-        onProgress: setUploadFraction,
+        sizeBytes: recorder.result.blob.size,
+        createdAt: Date.now(),
       })
       setDone(true)
-      setTimeout(() => navigate('/'), 900)
+      setTimeout(() => navigate('/'), 700)
     } catch (err) {
-      setSubmitError(getErrorMessage(err, 'アップロードに失敗しました'))
-      console.error('recording upload failed', err)
-      setUploadFraction(null)
+      setSubmitError(getErrorMessage(err, '保存に失敗しました'))
+      console.error('recording save failed', err)
+    } finally {
+      setSaving(false)
     }
   }
-
-  if (!activeGroup) return null
 
   return (
     <div className="page">
@@ -143,11 +137,11 @@ export function RecordPage() {
       <section className="card">
         <h2>2. レベルを選ぶ</h2>
         <div className="level-filter-chips">
-          {activeGroup.levels.map((l) => (
+          {levels.map((l) => (
             <button
               key={l}
               type="button"
-              className={`chip ${level === l ? 'chip--active' : ''}`}
+              className={`chip ${effectiveLevel === l ? 'chip--active' : ''}`}
               onClick={() => setLevel(l)}
             >
               {l}
@@ -219,14 +213,10 @@ export function RecordPage() {
       <button
         type="button"
         className="btn-primary btn-submit"
-        disabled={!canSubmit || uploadFraction !== null}
+        disabled={!canSubmit || saving}
         onClick={handleSubmit}
       >
-        {done
-          ? '保存しました ✓'
-          : uploadFraction !== null
-            ? `アップロード中... ${Math.round(uploadFraction * 100)}%`
-            : '保存して共有する'}
+        {done ? '保存しました ✓' : saving ? '保存中...' : 'この端末に保存する'}
       </button>
     </div>
   )

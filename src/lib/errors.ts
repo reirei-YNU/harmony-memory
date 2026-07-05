@@ -1,6 +1,6 @@
-// Supabase's PostgrestError/AuthError-like objects are plain objects with a
-// `message` field, not real Error instances, so `err instanceof Error` misses
-// them and callers fell back to a generic message that hid the real cause.
+// Some thrown values (DOMException in older engines, object-shaped errors
+// from third-party libs) aren't real Error instances, so `err instanceof
+// Error` alone can miss a perfectly good `message` field.
 export function getErrorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error) return err.message
   if (
